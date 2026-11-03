@@ -159,6 +159,7 @@ async function instBuf(s){
 async function playClip(){
  const s=G.song;stop();G.plays++;
  if(!G.inst){playNormal(s);return}
+ actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume();
  document.querySelectorAll(".play").forEach(b=>{b.disabled=true;b.textContent="Removing vocals…"});
  try{
   const buf=await instBuf(s);
