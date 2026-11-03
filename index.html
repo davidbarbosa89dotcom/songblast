@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Song Showdown – Audio Edition</title>
+<style>
+:root{--bg:#f4f6f5;--card:#fff;--text:#14201a;--muted:#5d6b63;--line:#dce3df;--accent:#1db954;--accent-t:#06260f;--bad:#d64545;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1411;--card:#18211c;--text:#eaf2ed;--muted:#97a79d;--line:#2a3830;--bad:#ff6b6b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:28px;margin:8px 0 4px}h2{margin:0 0 8px;font-size:20px}
+p.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input[type=text]{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:16px}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+button{font:inherit;cursor:pointer;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:11px 18px}
+button.main{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:700}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg button{padding:8px 14px}.seg button.on{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:700}
+.score{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.p{border:2px solid var(--line);border-radius:14px;padding:8px 10px;background:var(--card)}
+.p.on{border-color:var(--c)}.p b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p span{font-size:22px;font-weight:800;color:var(--c)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);margin-right:6px}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:14px 0}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+.play{width:100%;padding:18px;font-size:18px}
+.msg{padding:12px;border-radius:12px;margin:10px 0;font-weight:600}
+.msg.ok{background:rgba(29,185,84,.15)}.msg.no{background:rgba(214,69,69,.15);color:var(--bad)}
+.got{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.chip{padding:4px 12px;border-radius:99px;background:var(--bg);border:1px solid var(--line);font-size:14px}
+.chip.y{background:rgba(29,185,84,.15);border-color:var(--accent)}
+.rev{display:flex;gap:14px;align-items:center;margin-top:10px}
+.rev img{width:84px;height:84px;border-radius:10px}
+.rank{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const COL=["#1db954","#e8590c","#4c6ef5","#d6336c"];
+const CATS={
+ pop:{n:"🎤 Modern pop",a:["Taylor Swift","Ed Sheeran","Dua Lipa","Billie Eilish","Harry Styles","The Weeknd","Ariana Grande","Bruno Mars","Adele","Justin Bieber","Olivia Rodrigo","Sabrina Carpenter","Lady Gaga","Katy Perry","Rihanna"]},
+ oldies:{n:"📼 80s & 90s",a:["Michael Jackson","Madonna","Queen","a-ha","Whitney Houston","Bon Jovi","Prince","Nirvana","Backstreet Boys","Spice Girls","Oasis","Guns N’ Roses","Phil Collins","Toto","Eagles"]},
+ rock:{n:"🎸 Rock",a:["Coldplay","Imagine Dragons","Foo Fighters","The Killers","Green Day","Linkin Park","Arctic Monkeys","Red Hot Chili Peppers","AC/DC","Metallica","Journey","Fleetwood Mac"]},
+ hiphop:{n:"🎧 Hip-hop",a:["Eminem","Drake","Kendrick Lamar","Kanye West","Jay-Z","Cardi B","Post Malone","Travis Scott","Snoop Dogg","50 Cent","Lil Nas X","OutKast"]},
+ latin:{n:"💃 Latin",a:["Bad Bunny","Shakira","J Balvin","Karol G","Luis Fonsi","Daddy Yankee","Maluma","Enrique Iglesias","Ricky Martin","Peso Pluma","Natanael Cano","Christian Nodal"]}
+};
+const $=s=>document.getElementById(s),app=$("app");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^the /,"").replace(/[^a-z0-9]/g,"");
+function lev(a,b){const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
+for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]==b[j-1]?0:1));return d[a.length][b.length]}
+const close=(g,t)=>{g=norm(g);t=norm(t);return g.length>1&&lev(g,t)<=Math.floor(t.length/6)};
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const cleanTitle=t=>t.replace(/\s*[\(\[].*?[\)\]]/g,"").replace(/\s+-\s+.*$/,"").trim();
+const artistMatch=(g,a)=>{const ng=norm(g);if(ng.length<3)return false;
+ return a.split(/,|&|\bfeat\.?\b|\bft\.?\b|\band\b/i).some(p=>p.trim()&&close(g,p.trim()))||(ng.length>=4&&norm(a).includes(ng))};
+
+let actx,srcN,cache={};
+let cfg={n:2,rounds:3,clip:10,names:["","","",""]},G,audio=null,tick=null;
+
+function jsonp(url){return new Promise((res,rej)=>{const cb="cb"+Math.random().toString(36).slice(2),s=document.createElement("script");
+ const t=setTimeout(()=>{cleanup();rej(new Error("timeout"))},9000);
+ function cleanup(){clearTimeout(t);delete window[cb];s.remove()}
+ window[cb]=d=>{cleanup();res(d)};s.onerror=()=>{cleanup();rej(new Error("network"))};
+ s.src=url+"&callback="+cb;document.head.appendChild(s)})}
+
+async function loadCat(cat){
+ const arts=shuffle(CATS[cat].a).slice(0,12);
+ const results=await Promise.allSettled(arts.map(a=>jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(a)}&media=music&entity=song&attribute=artistTerm&limit=30`).then(d=>({a,r:d.results||[]}))));
+ const lists=[];
+ results.forEach(x=>{if(x.status!="fulfilled")return;const seen=new Set(),na=norm(x.value.a);
+  const l=x.value.r.filter(r=>r.previewUrl&&r.trackName&&norm(r.artistName).includes(na)).map(r=>({title:cleanTitle(r.trackName),artist:r.artistName,url:r.previewUrl,art:(r.artworkUrl100||"").replace("100x100","300x300"),link:r.trackViewUrl,year:(r.releaseDate||"").slice(0,4),genre:r.primaryGenreName||""}))
+   .filter(s=>{const k=norm(s.title);if(!k||seen.has(k))return false;seen.add(k);return true});
+  if(l.length)lists.push(shuffle(l))});
+ const out=[];for(let p=0;p<8;p++)out.push(...shuffle(lists.map(l=>l[p]).filter(Boolean)));
+ if(out.length<3)throw new Error("Not enough songs");
+ return out;
+}
+
+function setup(){
+ stop();
+ app.innerHTML=`<h1>🎧 Song Showdown</h1><p class="sub">On your turn, pick a genre (each player can use each genre only once), listen to a short clip, then name the song or the artist. Title = 3 pts, artist = 2 pts, year = up to 3 pts. Use the clue and all points that turn are halved.</p>
+ <div class="card"><h2>Players</h2><div class="row seg" id="np">${[2,3,4].map(n=>`<button data-n="${n}" class="${cfg.n==n?"on":""}">${n} players</button>`).join("")}</div>
+ ${[0,1,2,3].slice(0,cfg.n).map(i=>`<label><span class="dot" style="--c:${COL[i]}"></span>Player ${i+1}</label><input type="text" maxlength="14" data-i="${i}" placeholder="Player ${i+1}" value="${esc(cfg.names[i])}">`).join("")}</div>
+ <div class="card"><h2>Settings</h2>
+ <label>Clip length</label><div class="row seg" id="cl">${[5,10,15].map(n=>`<button data-c="${n}" class="${cfg.clip==n?"on":""}">${n} sec</button>`).join("")}</div>
+ <label>Turns each</label><div class="row seg" id="rd">${[2,3,5].map(n=>`<button data-r="${n}" class="${cfg.rounds==n?"on":""}">${n}</button>`).join("")}</div></div>
+ <button class="main" id="go" style="width:100%">Start game</button>`;
+ const bind=(id,attr,key)=>$(id).onclick=e=>{const v=e.target.dataset[attr];if(v){save();cfg[key]=isNaN(v)?v:+v;setup()}};
+ bind("np","n","n");bind("cl","c","clip");bind("rd","r","rounds");
+ $("go").onclick=()=>{save();start()};
+}
+function save(){app.querySelectorAll("input[data-i]").forEach(i=>cfg.names[i.dataset.i]=i.value.trim())}
+
+function start(){
+ const names=[...Array(cfg.n)].map((_,i)=>cfg.names[i]||"Player "+(i+1));
+ G={names,scores:names.map(()=>0),turn:0,total:cfg.n*cfg.rounds,used:names.map(()=>[]),pool:{}};
+ newTurn();play();
+}
+function scoreboard(pl){return `<div class="score">${G.names.map((n,i)=>`<div class="p ${i==pl?"on":""}" style="--c:${COL[i]}"><b>${esc(n)}</b><span>${G.scores[i]}</span></div>`).join("")}</div>`}
+function pickScreen(){
+ const pl=G.turn%cfg.n,used=G.used[pl];
+ app.innerHTML=scoreboard(pl)+`<div class="card"><div class="row" style="justify-content:space-between"><h2><span class="dot" style="--c:${COL[pl]}"></span>${esc(G.names[pl])}, choose a genre</h2><small style="color:var(--muted)">Song ${G.turn+1} of ${G.total}</small></div>
+ <p class="sub" style="margin:0 0 12px">You can only use each genre once, so choose wisely.</p>
+ <div style="display:grid;gap:8px">${Object.entries(CATS).map(([k,v])=>`<button class="main" data-k="${k}" ${used.includes(k)?"disabled":""} style="${used.includes(k)?"":"padding:14px"}">${v.n}${used.includes(k)?" · used ✓":""}</button>`).join("")}</div></div>`;
+ app.querySelectorAll("button[data-k]").forEach(b=>b.onclick=()=>choose(b.dataset.k));
+}
+async function choose(cat){
+ const pl=G.turn%cfg.n;
+ app.innerHTML=`<h1>Loading ${esc(CATS[cat].n)}…</h1><p class="sub">Fetching clips from Apple’s music catalog.</p>`;
+ try{
+  if(!G.pool[cat]||!G.pool[cat].length)G.pool[cat]=await loadCat(cat);
+  G.song=G.pool[cat].shift();G.catName=CATS[cat].n;G.used[pl].push(cat);play();
+ }catch(e){
+  app.innerHTML=`<h1>Couldn’t load songs</h1><p class="sub">Check your internet connection and try again. (${esc(e.message)})</p><div class="row"><button class="main" id="r">Retry</button><button id="b">Pick another genre</button></div>`;
+  $("r").onclick=()=>choose(cat);$("b").onclick=pickScreen;
+ }
+}
+const pattern=t=>t.split(" ").map(w=>[...w].map(c=>/\p{L}|\d/u.test(c)?"_":c).join(" ")).join("   ");
+const half=g=>Math.ceil(g*(G.inst?2:1)*(G.clue?.5:1));
+function newTurn(){Object.assign(G,{song:null,gT:false,gA:false,gY:false,clue:false,inst:false,wrong:0,plays:0,done:false,msg:"",ok:false,off:Math.random()*(30-cfg.clip-2)|0})}
+function stop(){if(srcN){try{srcN.stop()}catch(e){}srcN=null}if(audio){audio.pause();audio=null}clearInterval(tick);const b=document.querySelector(".bar i");if(b)b.style.width="0"}
+
+function bar(p){const b=document.querySelector(".bar i");if(b)b.style.width=Math.max(0,Math.min(1,p))*100+"%"}
+function busy(){document.querySelectorAll(".play").forEach(b=>{b.disabled=true;b.textContent="🔊 Playing…"})}
+function done(){stop();const pl=$("pl"),pi=$("pli");if(pi)pi.remove();
+ if(pl){pl.disabled=G.plays>=3;pl.style.flex="";pl.textContent=(G.inst?"🎼 Replay instrumental":"▶ Replay")+` (${3-G.plays} left)`}}
+function playNormal(s){
+ audio=new Audio(s.url);const a=audio,off=G.off;
+ const go=()=>{a.currentTime=off;a.play().catch(()=>{})};
+ a.readyState<1?a.addEventListener("loadedmetadata",go,{once:true}):go();
+ tick=setInterval(()=>{bar((a.currentTime-off)/cfg.clip);if(a.currentTime-off>=cfg.clip||a.ended)done()},100);
+ busy();
+}
+async function instBuf(s){
+ if(cache[s.url])return cache[s.url];
+ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+ const ab=await (await fetch(s.url)).arrayBuffer(),b=await actx.decodeAudioData(ab);
+ if(b.numberOfChannels<2)throw new Error("mono");
+ const L=b.getChannelData(0),R=b.getChannelData(1),n=b.length,o=actx.createBuffer(1,n,b.sampleRate),d=o.getChannelData(0);
+ const k=1-Math.exp(-2*Math.PI*150/b.sampleRate);let lp=0,e=0;
+ for(let i=0;i<n;i++){const mid=(L[i]+R[i])/2;lp+=k*(mid-lp);d[i]=(L[i]-R[i])*0.9+lp;e+=d[i]*d[i]}
+ if(Math.sqrt(e/n)<0.003)throw new Error("silent");
+ return cache[s.url]=o;
+}
+async function playClip(){
+ const s=G.song;stop();G.plays++;
+ if(!G.inst){playNormal(s);return}
+ document.querySelectorAll(".play").forEach(b=>{b.disabled=true;b.textContent="Removing vocals…"});
+ try{
+  const buf=await instBuf(s);
+  if(actx.state=="suspended")await actx.resume();
+  srcN=actx.createBufferSource();srcN.buffer=buf;srcN.connect(actx.destination);
+  const t0=actx.currentTime;srcN.start(0,G.off,cfg.clip);busy();
+  tick=setInterval(()=>{bar((actx.currentTime-t0)/cfg.clip);if(actx.currentTime-t0>=cfg.clip)done()},100);
+ }catch(err){
+  G.inst=false;G.ok=false;G.msg="Couldn’t remove the vocals for this song (browser limits or a mono recording), so it plays normally with no ×2 bonus.";
+  play();playNormal(s);
+ }
+}
+
+function play(){
+ if(G.turn>=G.total)return end();
+ if(!G.song)return pickScreen();
+ const s=G.song,pl=G.turn%cfg.n;
+ let h=`<div class="score">${G.names.map((n,i)=>`<div class="p ${i==pl?"on":""}" style="--c:${COL[i]}"><b>${esc(n)}</b><span>${G.scores[i]}</span></div>`).join("")}</div>
+ <div class="card"><div class="row" style="justify-content:space-between"><h2><span class="dot" style="--c:${COL[pl]}"></span>${esc(G.names[pl])}’s turn</h2><small style="color:var(--muted)">${esc(G.catName)} · Song ${G.turn+1} of ${G.total}</small></div>
+ ${G.inst?'<div class="chip y" style="display:inline-block;margin-bottom:6px">🎼 Instrumental mode ×2</div>':""}<div class="got"><span class="chip ${G.gT?"y":""}">Title: ${G.gT?esc(s.title):"?"}</span><span class="chip ${G.gA?"y":""}">Artist: ${G.gA?esc(s.artist):"?"}</span>${s.year?`<span class="chip ${G.gY?"y":""}">Year: ${G.gY?s.year:"?"}</span>`:""}</div>`;
+ if(G.clue)h+=`<div class="msg ok" style="font-weight:500">💡 <b>Clue (half points):</b> ${s.genre?esc(s.genre)+" · ":""}${s.year?Math.floor(s.year/10)*10+"s · ":""}<span style="font-family:ui-monospace,monospace;letter-spacing:2px">${pattern(s.title)}</span></div>`;
+ if(!G.done){
+  h+=G.plays?`<button class="main play" id="pl" ${G.plays>=3?"disabled":""}>${G.inst?"🎼 Replay instrumental":"▶ Replay"} (${3-G.plays} left)</button>`
+   :`<div class="row"><button class="main play" id="pl" style="flex:1">▶ Play clip</button><button class="play" id="pli" style="flex:1;padding:18px;font-size:18px;border-color:var(--accent)">🎼 Instrumental ×2 pts</button></div><p style="color:var(--muted);font-size:13px;margin:6px 2px 0">Pick instrumental for double points on this song. Vocals are only approximately removed.</p>`;
+  h+=`<div class="bar"><i></i></div>`;
+ }
+ if(G.msg)h+=`<div class="msg ${G.ok?"ok":"no"}">${G.msg}</div>`;
+ if(G.done){
+  h+=`<div class="rev">${s.art?`<img src="${esc(s.art)}" alt="">`:""}<div><b>${esc(s.title)}</b><br>${esc(s.artist)}${s.year?" · "+s.year:""}<br><a href="https://open.spotify.com/search/${encodeURIComponent(s.title+" "+s.artist)}" target="_blank" rel="noopener">Spotify ↗</a>${s.link?` · <a href="${esc(s.link)}" target="_blank" rel="noopener">Apple Music ↗</a>`:""}</div></div>
+  <button class="main" id="next" style="width:100%;margin-top:14px">${G.turn+1>=G.total?"See results":"Next song"}</button>`;
+ }else{
+  h+=`<div class="row"><input type="text" id="g" placeholder="Title, artist or year (e.g. 1998)…" autocomplete="off" style="flex:1;min-width:160px"><button class="main" id="sub">Guess</button></div>
+  <div class="row" style="margin-top:10px"><span style="color:var(--muted);font-size:14px">Year: exact 3 pts, ±1 = 2, ±2 = 1 · Wrong guesses: ${G.wrong}/3</span><span style="flex:1"></span><button id="clue" ${G.clue?"disabled":""}>💡 Clue (½ points)</button><button id="giveup">Reveal</button></div>`;
+ }
+ app.innerHTML=h+"</div>";
+ if(G.done){$("next").onclick=()=>{stop();G.turn++;newTurn();play()};return}
+ $("pl").onclick=()=>{if(!G.plays)G.inst=false;playClip()};
+ if($("pli"))$("pli").onclick=()=>{G.inst=true;playClip()};
+ const inp=$("g"),guess=()=>{const v=inp.value.trim();if(!v)return;
+  let gain=0;
+  if(s.year&&/^(19|20)\d{2}$/.test(v)){
+   if(G.gY){G.ok=false;G.msg="You already guessed the year.";play();return}
+   const d=Math.abs(+v-+s.year);G.gY=true;gain=half(d==0?3:d==1?2:d==2?1:0);G.scores[pl]+=gain;G.ok=gain>0;
+   G.msg=gain?`📅 ${d==0?"Exact year!":"Off by "+d+(d>1?" years":" year")+"."} +${gain} point${gain>1?"s":""}`:`📅 Off by ${d} years — no points.`;
+   if(G.gT&&G.gA&&G.gY){G.done=true;stop()}play();return}
+  if(!G.gT&&close(v,s.title)){G.gT=true;gain=3}
+  else if(!G.gA&&artistMatch(v,s.artist)){G.gA=true;gain=2}
+  gain=half(gain);
+  if(gain){G.scores[pl]+=gain;G.ok=true;G.msg=`🎉 +${gain} points!`+(G.gT&&G.gA?"":" Keep going for the rest.")}
+  else{G.wrong++;G.ok=false;G.msg=`“${esc(v)}” isn’t right.`}
+  if((G.gT&&G.gA&&(G.gY||!s.year))||G.wrong>=3){G.done=true;stop()}
+  keep();play()};
+ const keep=()=>{};
+ $("sub").onclick=guess;inp.onkeydown=e=>{if(e.key=="Enter")guess()};
+ $("clue").onclick=()=>{G.clue=true;play()};
+ $("giveup").onclick=()=>{G.done=true;G.ok=false;G.msg="Revealed.";stop();play()};
+ if(G.plays&&audio&&!audio.paused){$("pl").disabled=true;$("pl").textContent="🔊 Playing…"}
+}
+function end(){
+ stop();
+ const r=G.names.map((n,i)=>({n,s:G.scores[i],i})).sort((a,b)=>b.s-a.s),w=r.filter(x=>x.s==r[0].s);
+ app.innerHTML=`<h1>🏆 ${w.length>1?"It’s a tie!":esc(w[0].n)+" wins!"}</h1><p class="sub">Final scores</p><div class="card">${r.map((x,k)=>`<div class="rank"><span>${k+1}. <span class="dot" style="--c:${COL[x.i]}"></span>${esc(x.n)}</span><b>${x.s} pts</b></div>`).join("")}</div>
+ <div class="row"><button class="main" id="again">Play again</button><button id="back">Change settings</button></div>`;
+ $("again").onclick=start;$("back").onclick=setup;
+}
+setup();
+</script>
+</body>
+</html>
