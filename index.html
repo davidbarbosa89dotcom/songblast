@@ -71,16 +71,22 @@ function jsonp(url){return new Promise((res,rej)=>{const cb="cb"+Math.random().t
  window[cb]=d=>{cleanup();res(d)};s.onerror=()=>{cleanup();rej(new Error("network"))};
  s.src=url+"&callback="+cb;document.head.appendChild(s)})}
 
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function itunes(term){
+ const url=`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&attribute=artistTerm&limit=30`;
+ try{const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);const r=await fetch(url,{signal:c.signal});clearTimeout(t);if(!r.ok)throw new Error("http "+r.status);return (await r.json()).results||[]}
+ catch(e){return (await jsonp(url)).results||[]}
+}
 async function loadCat(cat){
- const arts=shuffle(CATS[cat].a).slice(0,12);
- const results=await Promise.allSettled(arts.map(a=>jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(a)}&media=music&entity=song&attribute=artistTerm&limit=30`).then(d=>({a,r:d.results||[]}))));
+ const arts=shuffle(CATS[cat].a).slice(0,6);let fails=0,lastErr="";
+ const results=await Promise.allSettled(arts.map((a,i)=>sleep(i*350).then(()=>itunes(a)).then(r=>({a,r})).catch(e=>{fails++;lastErr=e.message;throw e})));
  const lists=[];
  results.forEach(x=>{if(x.status!="fulfilled")return;const seen=new Set(),na=norm(x.value.a);
   const l=x.value.r.filter(r=>r.previewUrl&&r.trackName&&norm(r.artistName).includes(na)).map(r=>({title:cleanTitle(r.trackName),artist:r.artistName,url:r.previewUrl,art:(r.artworkUrl100||"").replace("100x100","300x300"),link:r.trackViewUrl,year:(r.releaseDate||"").slice(0,4),genre:r.primaryGenreName||""}))
    .filter(s=>{const k=norm(s.title);if(!k||seen.has(k))return false;seen.add(k);return true});
   if(l.length)lists.push(shuffle(l))});
  const out=[];for(let p=0;p<8;p++)out.push(...shuffle(lists.map(l=>l[p]).filter(Boolean)));
- if(out.length<3)throw new Error("Not enough songs");
+ if(out.length<3)throw new Error(fails==arts.length?"all "+fails+" requests to Apple failed: "+lastErr:"no playable clips found");
  return out;
 }
 
